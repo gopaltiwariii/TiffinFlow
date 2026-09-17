@@ -129,7 +129,7 @@ function getPauseWeekdaysForMonth(monthStart, monthEnd, pausePeriods) {
   return uniqueDates.size;
 }
 
-function calculateBillForMonth({ monthlyPlanPrice, subscriptionStartDate, pausePeriods, month }) {
+function calculateBillForMonth({ monthlyPlanPrice, subscriptionStartDate, pausePeriods, month, serviceStartDate, serviceEndDate }) {
   const price = Number(monthlyPlanPrice);
   if (!Number.isFinite(price) || price <= 0) {
     throw new Error('Monthly plan price must be a positive number');
@@ -143,13 +143,32 @@ function calculateBillForMonth({ monthlyPlanPrice, subscriptionStartDate, pauseP
   const monthBounds = getMonthBounds(month);
   const monthStart = toISODate(monthBounds.start);
   const monthEnd = toISODate(monthBounds.end);
-  const billableStart = toISODate(
-    new Date(Math.max(subscriptionDate.getTime(), monthBounds.start.getTime())),
-  );
 
-  const totalWeekdays = getWeekdayCountForMonth(billableStart, monthEnd);
-  const pausedWeekdays = getPauseWeekdaysForMonth(billableStart, monthEnd, pausePeriods);
-  const deliveredWeekdays = Math.max(0, totalWeekdays - pausedWeekdays);
+  const baseStart = toISODate(new Date(Math.max(subscriptionDate.getTime(), monthBounds.start.getTime())));
+  const effectiveStart = serviceStartDate
+    ? toISODate(new Date(Math.max(parseISODate(serviceStartDate).getTime(), parseISODate(baseStart).getTime())))
+    : baseStart;
+
+  const effectiveEnd = serviceEndDate
+    ? toISODate(new Date(Math.min(parseISODate(serviceEndDate).getTime(), parseISODate(monthEnd).getTime())))
+    : monthEnd;
+
+  if (parseISODate(effectiveStart) > parseISODate(effectiveEnd)) {
+    return {
+      month,
+      totalWeekdays: 0,
+      pausedWeekdays: 0,
+      deliveredWeekdays: 0,
+      dailyRateCents: 0,
+      finalBillCents: 0,
+      finalBillDisplay: '₹0.00',
+    };
+  }
+
+  const totalWeekdays = getWeekdayCountForMonth(baseStart, monthEnd);
+  const effectiveWeekdays = getWeekdayCountForMonth(effectiveStart, effectiveEnd);
+  const pausedWeekdays = getPauseWeekdaysForMonth(effectiveStart, effectiveEnd, pausePeriods);
+  const deliveredWeekdays = Math.max(0, effectiveWeekdays - pausedWeekdays);
 
   if (totalWeekdays === 0) {
     return {

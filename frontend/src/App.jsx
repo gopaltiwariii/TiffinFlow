@@ -11,7 +11,34 @@ import {
 } from 'react-router-dom';
 import './App.css';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const DEFAULT_API_BASE = 'http://localhost:4000';
+
+function resolveApiBaseUrl() {
+  const configuredUrl = import.meta.env.VITE_API_URL?.trim();
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, '');
+  }
+
+  if (typeof window === 'undefined') {
+    return DEFAULT_API_BASE;
+  }
+
+  const { hostname, protocol } = window.location;
+  const isLocalHost = ['localhost', '127.0.0.1', '0.0.0.0'].includes(hostname);
+
+  if (isLocalHost) {
+    return DEFAULT_API_BASE;
+  }
+
+  if (hostname.includes('app.github.dev') || hostname.includes('github.dev')) {
+    const sansPortPrefix = hostname.replace(/^\d+-/, '');
+    return `${protocol}//4000-${sansPortPrefix}`;
+  }
+
+  return `${protocol}//${hostname}`;
+}
+
+const API_BASE = resolveApiBaseUrl();
 
 function getStoredToken() {
   return localStorage.getItem('tiffinflow-token');
@@ -19,17 +46,20 @@ function getStoredToken() {
 
 async function apiRequest(path, options = {}) {
   const token = options.token ?? getStoredToken();
-  const requestBody =
-    options.body !== undefined && typeof options.body !== 'string' && !(options.body instanceof FormData)
-      ? JSON.stringify(options.body)
-      : options.body;
+  const isRawBody = typeof options.body === 'string'
+    || options.body instanceof FormData
+    || options.body instanceof Blob
+    || options.body instanceof ArrayBuffer
+    || options.body instanceof URLSearchParams;
+
+  const requestBody = options.body !== undefined && !isRawBody ? JSON.stringify(options.body) : options.body;
 
   const response = await fetch(`${API_BASE}${path}`, {
     method: options.method || 'GET',
     ...options,
     body: requestBody,
     headers: {
-      'Content-Type': 'application/json',
+      ...(options.body !== undefined && !isRawBody ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
@@ -96,12 +126,15 @@ function App() {
         <header className="topbar">
           <div className="brand-block">
             <Link to="/" className="brand-link">
-              <span className="brand-mark">TF</span>
-              <span>TiffinFlow</span>
+              <span className="brand-mark">🍱</span>
+              <span className="brand-text">
+                <strong>TiffinFlow</strong>
+                <small>Home-style meal ops</small>
+              </span>
             </Link>
           </div>
 
-          <nav className="nav">
+          <nav className="nav" aria-label="Main navigation">
             <NavLink to="/">Home</NavLink>
             {!token ? (
               <>
@@ -132,7 +165,7 @@ function App() {
             />
             <Route
               path="/dashboard"
-              element={token ? <DashboardPage token={token} /> : <Navigate to="/login" replace />}
+              element={token ? <DashboardPage token={token} onLogout={handleLogout} /> : <Navigate to="/login" replace />}
             />
             <Route
               path="/customers/:customerId"
@@ -157,70 +190,116 @@ function LandingPage() {
   return (
     <div className="landing-page">
       <section className="hero-panel">
-        <div>
-          <span className="eyebrow">Owner operations dashboard</span>
-          <h1>TiffinFlow</h1>
+        <div className="hero-copy-block">
+          <span className="eyebrow">Premium tiffin operations</span>
+          <h1>Run your tiffin service with confidence.</h1>
           <p className="hero-copy">
-            TiffinFlow helps home-style tiffin businesses track customers, manage pauses,
-            and calculate accurate prorated monthly bills without spreadsheet headaches.
+            Manage customers, pauses, daily lunch deliveries, and fair monthly billing — all from one
+            calm workspace built for home-style tiffin businesses.
           </p>
           <div className="cta-row">
             <Link to="/register" className="primary-button">
               Get started
             </Link>
-            <Link to="/login" className="secondary-button">
-              Login
+            <Link to="/dashboard" className="secondary-button">
+              View dashboard
             </Link>
           </div>
-        </div>
 
-        <div className="stats-box">
-          <div className="mini-stat">
-            <strong>₹ 3,000</strong>
-            <span>Average plan</span>
-          </div>
-          <div className="mini-stat">
-            <strong>5 days</strong>
-            <span>Per week</span>
-          </div>
-          <div className="mini-stat">
-            <strong>100%</strong>
-            <span>Bill precision</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="feature-grid">
-        <div className="info-card">
-          <h3>What it does</h3>
-          <p>Manage subscriptions, pause windows, and monthly billing for weekday lunch delivery.</p>
-        </div>
-
-        <div className="info-card">
-          <h3>Key features</h3>
-          <ul>
-            {features.map((item) => (
+          <ul className="trust-row" aria-label="Highlights">
+            {['Customer tracking', 'Pause windows', 'Daily delivery check'].map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
         </div>
 
-        <div className="info-card">
-          <h3>Target audience</h3>
-          <p>Independent tiffin owners and small home-kitchen meal services.</p>
+        <div className="product-preview" aria-label="Dashboard preview">
+          <div className="preview-card">
+            <div className="preview-head">
+              <span>Today&apos;s Tiffin Run</span>
+              <span className="preview-pill">Live</span>
+            </div>
+            <div className="preview-list">
+              <div className="preview-row">
+                <div className="preview-person">
+                  <span className="tiny-avatar green">R</span>
+                  <div>
+                    <strong>Rahul Sharma</strong>
+                    <small>9876543210</small>
+                  </div>
+                </div>
+                <span className="mini-badge success">Ready</span>
+              </div>
+              <div className="preview-row">
+                <div className="preview-person">
+                  <span className="tiny-avatar saffron">A</span>
+                  <div>
+                    <strong>Amit Verma</strong>
+                    <small>9876543211</small>
+                  </div>
+                </div>
+                <span className="mini-badge success">Ready</span>
+              </div>
+              <div className="preview-row">
+                <div className="preview-person">
+                  <span className="tiny-avatar muted">N</span>
+                  <div>
+                    <strong>Neha Sharma</strong>
+                    <small>9123456789</small>
+                  </div>
+                </div>
+                <span className="mini-badge warning">Paused</span>
+              </div>
+            </div>
+
+            <div className="preview-summary">
+              <div>
+                <span>Active</span>
+                <strong>142</strong>
+              </div>
+              <div>
+                <span>Monthly billing</span>
+                <strong>₹ 1.4L</strong>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
+      <section className="feature-grid">
+        <article className="feature-card">
+          <span className="feature-icon">🍲</span>
+          <h3>Daily kitchen operations</h3>
+          <p>Track who is active today, who is paused, and who needs a delivery reminder.</p>
+        </article>
+
+        <article className="feature-card">
+          <span className="feature-icon">📦</span>
+          <h3>Operational clarity</h3>
+          <ul>
+            {features.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </article>
+
+        <article className="feature-card">
+          <span className="feature-icon">💰</span>
+          <h3>Fair monthly billing</h3>
+          <p>Keep billing accurate with weekday-only calculations and pause-aware cycle logic.</p>
+        </article>
+      </section>
+
       <section className="benefit-panel">
-        <h2>How it helps tiffin owners</h2>
+        <h2>Designed for tiffin owners</h2>
         <p>
-          Owners can quickly see active or paused customers, handle travel or festival pauses,
-          and calculate exact bills based on the weekdays actually served.
+          From daily lunch runs to monthly billing, TiffinFlow keeps your customer roster and service
+          windows beautifully organized without losing the personal touch of a home kitchen.
         </p>
       </section>
 
       <section className="future-panel">
-        <h2>Future features</h2>
+        <h2>Built for steady growth</h2>
         <ul>
           {futureFeatures.map((item) => (
             <li key={item}>{item}</li>
@@ -262,53 +341,71 @@ function AuthPage({ mode, onAuth }) {
   }
 
   return (
-    <div className="auth-card">
-      <h2>{isRegister ? 'Create your account' : 'Welcome back'}</h2>
-      <form className="stack-form" onSubmit={handleSubmit}>
-        {isRegister && (
+    <div className="auth-shell">
+      <div className="auth-illustration">
+        <span className="eyebrow">TiffinFlow workspace</span>
+        <h2>Keep every meal on schedule.</h2>
+        <p>Track customers, service windows, and billing in one premium owner dashboard.</p>
+        <div className="mini-metrics">
+          <div>
+            <strong>Secure</strong>
+            <span>JWT protected owner access</span>
+          </div>
+          <div>
+            <strong>Live</strong>
+            <span>Billing and delivery sync</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="auth-card">
+        <h2>{isRegister ? 'Create your account' : 'Welcome back'}</h2>
+        <form className="stack-form" onSubmit={handleSubmit}>
+          {isRegister && (
+            <label>
+              Name
+              <input
+                type="text"
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                required
+              />
+            </label>
+          )}
+
           <label>
-            Name
+            Email
             <input
-              type="text"
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
+              type="email"
+              value={form.email}
+              onChange={(event) => setForm({ ...form, email: event.target.value })}
               required
             />
           </label>
-        )}
 
-        <label>
-          Email
-          <input
-            type="email"
-            value={form.email}
-            onChange={(event) => setForm({ ...form, email: event.target.value })}
-            required
-          />
-        </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={form.password}
+              onChange={(event) => setForm({ ...form, password: event.target.value })}
+              required
+              minLength={6}
+            />
+          </label>
 
-        <label>
-          Password
-          <input
-            type="password"
-            value={form.password}
-            onChange={(event) => setForm({ ...form, password: event.target.value })}
-            required
-            minLength={6}
-          />
-        </label>
+          {error && <div className="error-box">{error}</div>}
 
-        {error && <div className="error-box">{error}</div>}
-
-        <button type="submit" className="primary-button" disabled={loading}>
-          {loading ? 'Please wait...' : isRegister ? 'Register' : 'Login'}
-        </button>
-      </form>
+          <button type="submit" className="primary-button" disabled={loading}>
+            {loading ? 'Please wait...' : isRegister ? 'Register' : 'Login'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
 
-function DashboardPage({ token }) {
+function DashboardPage({ token, onLogout }) {
   const [customers, setCustomers] = useState([]);
   const [statusCounts, setStatusCounts] = useState({ total: 0, active: 0, paused: 0 });
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
@@ -318,6 +415,12 @@ function DashboardPage({ token }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [outbox, setOutbox] = useState([]);
+  const [outboxLoading, setOutboxLoading] = useState(false);
+  const [clockState, setClockState] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
   const [customerForm, setCustomerForm] = useState({
     name: '',
     phone: '',
@@ -352,9 +455,71 @@ function DashboardPage({ token }) {
     }
   };
 
+  const loadOutbox = async () => {
+    setOutboxLoading(true);
+    try {
+      const result = await apiRequest('/api/outbox', { token });
+      setOutbox(result.data || []);
+    } catch (err) {
+      setError(err.message || 'Unable to load outbox');
+    } finally {
+      setOutboxLoading(false);
+    }
+  };
+
+  const handleClock = async () => {
+    try {
+      const result = await apiRequest('/api/clock', {
+        method: 'POST',
+        body: { businessDate: new Date().toISOString().slice(0, 10) },
+        token,
+      });
+      setClockState(`Generated ${result.generated} delivery notifications for ${result.business_date}.`);
+      await loadOutbox();
+    } catch (err) {
+      setClockState(err.message || 'Unable to trigger daily delivery check');
+    }
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) {
+      setClockState('Select a CSV file first.');
+      return;
+    }
+
+    setImporting(true);
+    setError('');
+    setClockState('');
+
+    try {
+      const result = await fetch(`${API_BASE}/api/customers/import`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': selectedFile.type || 'text/csv',
+        },
+        body: selectedFile,
+      });
+
+      const payload = await result.json();
+      if (!result.ok) {
+        throw new Error(payload.error || 'CSV import failed');
+      }
+
+      setImportResult(payload);
+      setSelectedFile(null);
+      await fetchCustomers(1, search, sort, order);
+    } catch (err) {
+      setClockState(err.message || 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     fetchCustomers(1, search, sort, order);
+    loadOutbox();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, sort, order]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -362,6 +527,8 @@ function DashboardPage({ token }) {
   const totalCustomers = pagination.total || statusCounts.total || customers.length;
   const activeCustomers = statusCounts.active || 0;
   const pausedCustomers = statusCounts.paused || 0;
+  const todayRunCustomers = customers.slice(0, 5);
+  const revenueEstimate = customers.reduce((sum, customer) => sum + Number(customer.monthly_plan_price || 0), 0);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -395,159 +562,333 @@ function DashboardPage({ token }) {
   };
 
   return (
-    <div className="dashboard-page">
-      <section className="stats-grid">
-        <div className="stat-card">
-          <span>Total customers</span>
-          <strong>{totalCustomers}</strong>
-        </div>
-        <div className="stat-card success">
-          <span>Active</span>
-          <strong>{activeCustomers}</strong>
-        </div>
-        <div className="stat-card warning">
-          <span>Paused</span>
-          <strong>{pausedCustomers}</strong>
-        </div>
-      </section>
-
-      <section className="content-grid">
-        <div className="panel">
-          <div className="panel-header">
-            <h2>Customer list</h2>
+    <div className="dashboard-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <span className="brand-mark small">🍱</span>
+          <div>
+            <strong>TiffinFlow</strong>
+            <small>Owner workspace</small>
           </div>
+        </div>
 
-          <div className="toolbar">
-            <input
-              type="search"
-              placeholder="Search by phone or name"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <select value={sort} onChange={(event) => setSort(event.target.value)}>
-              <option value="created_at">Newest</option>
-              <option value="name">Name</option>
-              <option value="phone">Phone</option>
-              <option value="status">Status</option>
-              <option value="monthly_plan_price">Plan price</option>
-            </select>
-            <select value={order} onChange={(event) => setOrder(event.target.value)}>
-              <option value="asc">Ascending</option>
-              <option value="desc">Descending</option>
-            </select>
+        <nav className="sidebar-nav" aria-label="Dashboard navigation">
+          <NavLink to="/dashboard" className="nav-item active">Overview</NavLink>
+          <a href="#customers-panel" className="nav-item">Customers</a>
+          <a href="#delivery-panel" className="nav-item">Today&apos;s deliveries</a>
+          <a href="#import-panel" className="nav-item">Import customers</a>
+          <a href="#notification-panel" className="nav-item">Notifications</a>
+        </nav>
+
+        <div className="sidebar-footer">
+          <button type="button" className="secondary-button small" onClick={onLogout}>
+            Logout
+          </button>
+        </div>
+      </aside>
+
+      <div className="workspace-panel">
+        <header className="workspace-header">
+          <div>
+            <p className="eyebrow soft">Operations dashboard</p>
+            <h1>Good morning, Owner 👋</h1>
+            <p className="workspace-subtitle">Here&apos;s what&apos;s happening with your tiffin service today.</p>
           </div>
+          <button type="button" className="primary-button" onClick={handleClock}>
+            Run delivery check
+          </button>
+        </header>
 
-          {error && <div className="error-box">{error}</div>}
-
-          {loading ? (
-            <p>Loading customers...</p>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Phone</th>
-                    <th>Plan</th>
-                    <th>Status</th>
-                    <th>Start</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {customers.map((customer) => (
-                    <tr key={customer.id}>
-                      <td>
-                        <Link to={`/customers/${customer.id}`}>{customer.name}</Link>
-                      </td>
-                      <td>{customer.phone}</td>
-                      <td>{formatCurrency(customer.monthly_plan_price * 100)}</td>
-                      <td>
-                        <span className={`pill ${customer.status === 'PAUSED' ? 'paused' : 'active'}`}>
-                          {customer.status}
-                        </span>
-                      </td>
-                      <td>{formatDate(customer.subscription_start_date)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <section className="summary-grid" aria-label="Overview metrics">
+          <article className="summary-card">
+            <div className="summary-icon green">👥</div>
+            <div>
+              <span>Total customers</span>
+              <strong>{totalCustomers}</strong>
+              <small>Across all active plans</small>
             </div>
-          )}
+          </article>
 
-          <div className="pagination-row">
-            <button
-              type="button"
-              className="secondary-button small"
-              disabled={pagination.page <= 1}
-              onClick={() => fetchCustomers(pagination.page - 1, search, sort, order)}
-            >
-              Prev
-            </button>
-            <span>
-              Page {pagination.page} / {pagination.totalPages}
-            </span>
-            <button
-              type="button"
-              className="secondary-button small"
-              disabled={pagination.page >= pagination.totalPages}
-              onClick={() => fetchCustomers(pagination.page + 1, search, sort, order)}
-            >
-              Next
-            </button>
+          <article className="summary-card accent">
+            <div className="summary-icon saffron">✓</div>
+            <div>
+              <span>Active</span>
+              <strong>{activeCustomers}</strong>
+              <small>Currently subscribed</small>
+            </div>
+          </article>
+
+          <article className="summary-card warning-card">
+            <div className="summary-icon amber">⏸</div>
+            <div>
+              <span>Paused</span>
+              <strong>{pausedCustomers}</strong>
+              <small>On hold this cycle</small>
+            </div>
+          </article>
+
+          <article className="summary-card revenue-card">
+            <div className="summary-icon green">₹</div>
+            <div>
+              <span>Monthly billing</span>
+              <strong>{formatCurrency(revenueEstimate * 100)}</strong>
+              <small>Based on current plans</small>
+            </div>
+          </article>
+        </section>
+
+        <section className="main-grid">
+          <div className="panel large-panel" id="delivery-panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-kicker">Today&apos;s tiffin run</p>
+                <h2>Customers scheduled for today&apos;s lunch</h2>
+              </div>
+            </div>
+
+            {clockState && <div className="success-box">{clockState}</div>}
+
+            {loading ? (
+              <p className="info-text">Loading customer list...</p>
+            ) : todayRunCustomers.length > 0 ? (
+              <div className="run-list">
+                {todayRunCustomers.map((customer) => (
+                  <div key={customer.id} className="run-row">
+                    <div className="customer-meta">
+                      <span className="avatar-circle">{customer.name?.charAt(0)?.toUpperCase() || 'C'}</span>
+                      <div>
+                        <strong>{customer.name}</strong>
+                        <small>{customer.phone}</small>
+                      </div>
+                    </div>
+                    <div className="run-meta">
+                      <span className={`status-tag ${customer.status === 'PAUSED' ? 'paused' : 'active'}`}>
+                        {customer.status === 'PAUSED' ? 'Paused' : 'Ready'}
+                      </span>
+                      <span className="mini-badge success">
+                        {outbox.some((item) => Number(item.payload?.customer_id) === Number(customer.id)) ? 'Queued' : 'Confirmed'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <h3>No customers yet</h3>
+                <p>Add your first tiffin subscriber to get started.</p>
+              </div>
+            )}
           </div>
-        </div>
 
-        <aside className="panel form-panel">
-          <h2>New subscription</h2>
-          <form className="stack-form" onSubmit={handleSubmit}>
-            <label>
-              Customer name
+          <div className="panel" id="notification-panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-kicker">Delivery notifications</p>
+                <h2>Today&apos;s activity</h2>
+              </div>
+            </div>
+
+            {outboxLoading ? (
+              <p className="info-text">Loading notifications...</p>
+            ) : outbox.length > 0 ? (
+              <ul className="notification-list">
+                {outbox.slice(0, 5).map((item) => (
+                  <li key={item.id}>
+                    <span className="notification-dot" aria-hidden="true" />
+                    <div>
+                      <strong>{item.payload?.customer_name || 'Customer'}</strong>
+                      <small>Delivery notification queued</small>
+                    </div>
+                    <span className="notification-time">{item.delivery_date}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="empty-state small">
+                <h3>No notifications yet</h3>
+                <p>Run the daily check to queue customer deliveries.</p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="customer-workspace" id="customers-panel">
+          <div className="panel customer-panel">
+            <div className="panel-header split-header">
+              <div>
+                <p className="section-kicker">Customer management</p>
+                <h2>Customers</h2>
+              </div>
+              <button type="button" className="primary-button small" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                + Add customer
+              </button>
+            </div>
+
+            <div className="toolbar">
               <input
-                type="text"
-                value={customerForm.name}
-                onChange={(event) => setCustomerForm({ ...customerForm, name: event.target.value })}
-                required
+                type="search"
+                placeholder="Search by name or phone..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
               />
-            </label>
+              <select value={sort} onChange={(event) => setSort(event.target.value)}>
+                <option value="created_at">Newest</option>
+                <option value="name">Name</option>
+                <option value="phone">Phone</option>
+                <option value="status">Status</option>
+                <option value="monthly_plan_price">Plan price</option>
+              </select>
+              <select value={order} onChange={(event) => setOrder(event.target.value)}>
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
+            </div>
 
-            <label>
-              Phone number
-              <input
-                type="tel"
-                value={customerForm.phone}
-                onChange={(event) => setCustomerForm({ ...customerForm, phone: event.target.value })}
-                required
-              />
-            </label>
+            {error && <div className="error-box">{error}</div>}
 
-            <label>
-              Monthly plan (₹)
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={customerForm.monthlyPlanPrice}
-                onChange={(event) => setCustomerForm({ ...customerForm, monthlyPlanPrice: event.target.value })}
-                required
-              />
-            </label>
+            {loading ? (
+              <p className="info-text">Loading customers...</p>
+            ) : customers.length > 0 ? (
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Customer</th>
+                      <th>Phone</th>
+                      <th>Plan</th>
+                      <th>Status</th>
+                      <th>Subscription</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customers.map((customer) => (
+                      <tr key={customer.id}>
+                        <td>
+                          <div className="table-user">
+                            <span className="avatar-mini">{customer.name?.charAt(0)?.toUpperCase() || 'C'}</span>
+                            <Link to={`/customers/${customer.id}`}>{customer.name}</Link>
+                          </div>
+                        </td>
+                        <td>{customer.phone}</td>
+                        <td>{formatCurrency(customer.monthly_plan_price * 100)}</td>
+                        <td>
+                          <span className={`pill ${customer.status === 'PAUSED' ? 'paused' : 'active'}`}>
+                            {customer.status}
+                          </span>
+                        </td>
+                        <td>{formatDate(customer.subscription_start_date)}</td>
+                        <td>
+                          <Link to={`/customers/${customer.id}`} className="table-link">
+                            View
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state">
+                <h3>No customers yet</h3>
+                <p>Add your first tiffin subscriber to get started.</p>
+              </div>
+            )}
 
-            <label>
-              Subscription start date
-              <input
-                type="date"
-                value={customerForm.subscriptionStartDate}
-                onChange={(event) => setCustomerForm({ ...customerForm, subscriptionStartDate: event.target.value })}
-                required
-              />
-            </label>
+            <div className="pagination-row">
+              <button type="button" className="secondary-button small" disabled={pagination.page <= 1} onClick={() => fetchCustomers(pagination.page - 1, search, sort, order)}>
+                Prev
+              </button>
+              <span>
+                Page {pagination.page} / {pagination.totalPages}
+              </span>
+              <button type="button" className="secondary-button small" disabled={pagination.page >= pagination.totalPages} onClick={() => fetchCustomers(pagination.page + 1, search, sort, order)}>
+                Next
+              </button>
+            </div>
+          </div>
 
-            <button type="submit" className="primary-button" disabled={submitting}>
-              {submitting ? 'Saving...' : 'Add customer'}
-            </button>
-          </form>
-        </aside>
-      </section>
+          <aside className="panel form-panel" id="import-panel">
+            <div className="panel-header">
+              <div>
+                <p className="section-kicker">Import customers</p>
+                <h2>Bring in your list</h2>
+              </div>
+            </div>
+
+            <form className="stack-form" onSubmit={handleSubmit}>
+              <label>
+                Customer name
+                <input
+                  type="text"
+                  value={customerForm.name}
+                  onChange={(event) => setCustomerForm({ ...customerForm, name: event.target.value })}
+                  required
+                />
+              </label>
+
+              <label>
+                Phone number
+                <input
+                  type="tel"
+                  value={customerForm.phone}
+                  onChange={(event) => setCustomerForm({ ...customerForm, phone: event.target.value })}
+                  required
+                />
+              </label>
+
+              <label>
+                Monthly plan (₹)
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={customerForm.monthlyPlanPrice}
+                  onChange={(event) => setCustomerForm({ ...customerForm, monthlyPlanPrice: event.target.value })}
+                  required
+                />
+              </label>
+
+              <label>
+                Subscription start date
+                <input
+                  type="date"
+                  value={customerForm.subscriptionStartDate}
+                  onChange={(event) => setCustomerForm({ ...customerForm, subscriptionStartDate: event.target.value })}
+                  required
+                />
+              </label>
+
+              <button type="submit" className="primary-button" disabled={submitting}>
+                {submitting ? 'Saving...' : 'Add customer'}
+              </button>
+            </form>
+
+            <div className="csv-block">
+              <label className="file-label">
+                CSV file
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
+                />
+              </label>
+
+              <button type="button" className="secondary-button" disabled={!selectedFile || importing} onClick={handleImport}>
+                {importing ? 'Importing...' : 'Import customer CSV'}
+              </button>
+
+              {importResult && (
+                <div className="import-report">
+                  <p>
+                    Imported {importResult.imported} · Deduped {importResult.deduped} · Rejected {importResult.rejected}
+                  </p>
+                </div>
+              )}
+            </div>
+          </aside>
+        </section>
+      </div>
     </div>
   );
 }
@@ -560,6 +901,7 @@ function CustomerDetailPage({ token }) {
   const [month, setMonth] = useState(getCurrentMonth());
   const [pauseForm, setPauseForm] = useState({ startDate: '', endDate: '', reason: 'Travel' });
   const [resumeDate, setResumeDate] = useState('');
+  const [transferForm, setTransferForm] = useState({ newCustomerId: '', effectiveDate: '', reason: '' });
   const [loading, setLoading] = useState(true);
   const [billLoading, setBillLoading] = useState(false);
   const [error, setError] = useState('');
@@ -646,6 +988,30 @@ function CustomerDetailPage({ token }) {
     }
   };
 
+  const handleTransfer = async (event) => {
+    event.preventDefault();
+    setActionState('');
+
+    try {
+      const payload = await apiRequest(`/api/customers/${customerId}/transfer`, {
+        method: 'POST',
+        body: {
+          newCustomerId: Number(transferForm.newCustomerId),
+          effectiveDate: transferForm.effectiveDate,
+          reason: transferForm.reason,
+        },
+        token,
+      });
+
+      setActionState(`Subscription transferred to customer ${payload.new_customer_name || transferForm.newCustomerId}.`);
+      setTransferForm({ newCustomerId: '', effectiveDate: '', reason: '' });
+      await loadCustomer();
+      await loadBill(month);
+    } catch (err) {
+      setActionState(err.message || 'Transfer failed');
+    }
+  };
+
   if (loading) {
     return (
       <div className="panel">
@@ -678,6 +1044,29 @@ function CustomerDetailPage({ token }) {
 
       {error && <div className="error-box">{error}</div>}
       {actionState && <div className="success-box">{actionState}</div>}
+
+      <section className="profile-summary">
+        <div className="profile-card hero-profile">
+          <div className="profile-avatar">{customer.name?.charAt(0)?.toUpperCase() || 'C'}</div>
+          <div>
+            <p className="section-kicker">Subscriber profile</p>
+            <h3>{customer.name}</h3>
+            <p>{customer.phone}</p>
+          </div>
+          <span className={`pill ${statusClass}`}>{customer.status}</span>
+        </div>
+
+        <div className="profile-card stat-profile">
+          <div>
+            <span>Monthly plan</span>
+            <strong>{formatCurrency(customer.monthly_plan_price * 100)}</strong>
+          </div>
+          <div>
+            <span>Started</span>
+            <strong>{formatDate(customer.subscription_start_date)}</strong>
+          </div>
+        </div>
+      </section>
 
       <section className="profile-grid">
         <div className="panel">
@@ -740,6 +1129,8 @@ function CustomerDetailPage({ token }) {
               />
             </label>
 
+            <p className="helper-copy">Paused weekdays won&apos;t be included in the monthly bill.</p>
+
             <button type="submit" className="primary-button">
               Pause subscription
             </button>
@@ -751,15 +1142,56 @@ function CustomerDetailPage({ token }) {
               <input type="date" value={resumeDate} onChange={(event) => setResumeDate(event.target.value)} />
             </label>
             <button type="button" className="secondary-button" onClick={handleResume}>
-              Resume
+              Resume service
             </button>
           </div>
         </div>
       </section>
 
+      <section className="panel">
+        <h3>Transfer subscription</h3>
+        <form className="stack-form narrow" onSubmit={handleTransfer}>
+          <label>
+            Destination customer ID
+            <input
+              type="number"
+              min="1"
+              value={transferForm.newCustomerId}
+              onChange={(event) => setTransferForm({ ...transferForm, newCustomerId: event.target.value })}
+              required
+            />
+          </label>
+
+          <label>
+            Effective date
+            <input
+              type="date"
+              value={transferForm.effectiveDate}
+              onChange={(event) => setTransferForm({ ...transferForm, effectiveDate: event.target.value })}
+              required
+            />
+          </label>
+
+          <label>
+            Reason
+            <input
+              type="text"
+              value={transferForm.reason}
+              onChange={(event) => setTransferForm({ ...transferForm, reason: event.target.value })}
+            />
+          </label>
+
+          <p className="helper-copy">The existing plan and billing cycle continue. Service attribution moves to the new customer from the effective date.</p>
+
+          <button type="submit" className="primary-button">
+            Transfer subscription
+          </button>
+        </form>
+      </section>
+
       <section className="panel bill-panel">
         <div className="panel-header">
-          <h3>Prorated bill</h3>
+          <h3>Monthly billing</h3>
           <label className="month-picker">
             Month
             <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
@@ -771,7 +1203,7 @@ function CustomerDetailPage({ token }) {
         ) : bill ? (
           <div className="bill-grid">
             <div className="bill-stat">
-              <span>Total weekdays</span>
+              <span>Billable weekdays</span>
               <strong>{bill.totalWeekdays}</strong>
             </div>
             <div className="bill-stat">
@@ -779,7 +1211,7 @@ function CustomerDetailPage({ token }) {
               <strong>{bill.pausedWeekdays}</strong>
             </div>
             <div className="bill-stat">
-              <span>Delivered weekdays</span>
+              <span>Delivered days</span>
               <strong>{bill.deliveredWeekdays}</strong>
             </div>
             <div className="bill-stat highlight">

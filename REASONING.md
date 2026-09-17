@@ -215,7 +215,41 @@ The customer list count uses an aggregate database count rather than depending o
 
 For a much larger production deployment, the database could be migrated to PostgreSQL and additional operational infrastructure could be introduced.
 
-## 12. Known Limitations
+## 12. Notifications and Outbox Design
+
+The daily delivery requirement was modeled as a real backend notification workflow, not a frontend mock.
+
+A Notification Service abstraction handles the decision to send a delivery reminder for a customer on a target business date. The service checks:
+
+- the subscription has started
+- the current date is a weekday
+- the customer is not paused
+- the customer is still active for that date
+- the same customer/date combination has not already been recorded in the outbox
+
+The generated events are persisted in SQLite so the evaluator can verify them through the outbox API. This keeps the service logically separated from the customer and billing routes and makes it easy to swap in WhatsApp, SMS, or email providers later.
+
+## 13. Subscription Transfer Design
+
+A simple customer name swap was rejected because it would lose the original subscription context. Instead, transfer history is stored as a first-class table that preserves:
+
+- the old customer
+- the new customer
+- the effective transfer date
+- the subscription cycle identifier
+- creation timestamps
+
+This preserves auditable ownership history and allows the same monthly cycle to remain consistent even when ownership changes mid-cycle. Billing then splits attribution by service window rather than by resetting or duplicating the monthly plan.
+
+## 14. CSV Import Design
+
+The import workflow treats messy customer lists as a trusted-data problem rather than a data-entry shortcut.
+
+The implementation normalizes the phone and date inputs, rejects blank or broken rows, checks duplicates both within the import and against the database, and wraps valid inserts in a transaction so a partial import cannot leave the database corrupted.
+
+The response includes a report object with imported, deduped, rejected, and row-level detail counts so the owner can review the outcome without needing a spreadsheet or external tool.
+
+## 15. Known Limitations
 
 This is an MVP designed for the Builder challenge rather than a complete production billing platform.
 

@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./src/routes/authRoutes');
 const customerRoutes = require('./src/routes/customerRoutes');
+const notificationRoutes = require('./src/routes/notificationRoutes');
 const { initDatabase } = require('./src/config/initDb');
 const { errorHandler, notFoundHandler } = require('./src/middleware/errorHandler');
 
@@ -23,6 +24,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api', notificationRoutes);
 app.use('/api/customers', customerRoutes);
 
 app.use(notFoundHandler);
