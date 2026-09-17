@@ -1,0 +1,57 @@
+:root {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  color: #322319;
+  background: #fffaf4;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #fffaf4;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+li,
+dl,
+dd,
+dt {
+  margin-top: 0;
+}
+
+a {
+  color: inherit;
+}
